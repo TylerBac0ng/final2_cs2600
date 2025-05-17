@@ -225,23 +225,21 @@ void initialize_rooms(Room rooms[]) {
 /**
  * Get the room description based on the current room and direction
  */
-const char* get_room_description(Room rooms[], int current_room, char direction) {
-	// Find the room index (array index is room ID - 1)
-	int room_idx = current_room - 1;
-	
-	// Make sure room index is valid
-	if (room_idx < 0 || room_idx >= MAX_ROOMS) {
-		return "Invalid room!";
-	}
-	
-	// Return the appropriate description based on direction
-	switch(direction) {
-		case 'n': return rooms[room_idx].north_desc;
-		case 's': return rooms[room_idx].south_desc;
-		case 'e': return rooms[room_idx].east_desc;
-		case 'w': return rooms[room_idx].west_desc;
-		default: return "Invalid direction!";
-	}
+const char* get_room_description_building4(Room rooms[], int current_room, char direction) {
+        // Find the room index (array index is room ID - 1)
+        int room_idx = current_room - 1;
+        // Make sure room index is valid
+        if (room_idx < 0 || room_idx >= MAX_ROOMS) {
+                return "Invalid room!";
+        }
+        // Return the appropriate description based on direction
+        switch(direction) {
+                case 'n': return rooms[room_idx].north_desc;
+                case 's': return rooms[room_idx].south_desc;
+                case 'e': return rooms[room_idx].east_desc;
+                case 'w': return rooms[room_idx].west_desc;
+                default: return "Invalid direction!";
+        }
 }
 
 const char* get_room_overview(int current_room) {
