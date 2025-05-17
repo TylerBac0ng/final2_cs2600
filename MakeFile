@@ -1,0 +1,38 @@
+CC=gcc
+CFLAGS=-Wall -g
+LDFLAGS=-lmosquitto
+
+OBJS=mud_server.o JulianA_room.o TylerB_room.o AllyN_room.o UmarA_room.o
+
+all: mud_server
+
+mud_server: $(OBJS)
+	$(CC) $(CFLAGS) -o mud_server $(OBJS) $(LDFLAGS)
+
+mud_server.o: mud_server.c rooms.h
+	$(CC) $(CFLAGS) -c mud_server.c
+
+JulianA_room.o: JulianA_room.c rooms.h
+	$(CC) $(CFLAGS) -c JulianA_room.c
+
+TylerB_room.o: TylerB_room.c rooms.h
+	$(CC) $(CFLAGS) -c TylerB_room.c
+
+AllyN_room.o: AllyN_room.c rooms.h
+	$(CC) $(CFLAGS) -c AllyN_room.c
+
+UmarA_room.o: UmarA_room.c rooms.h
+	$(CC) $(CFLAGS) -c UmarA_room.c
+
+clean:
+	rm -f mud_server $(OBJS)
+
+install: mud_server
+	sudo cp mud_server /usr/local/bin/
+	sudo cp mud_server.service /etc/systemd/system/
+	sudo systemctl daemon-reload
+	sudo systemctl enable mud_server
+	sudo systemctl start mud_server
+
+status:
+	sudo systemctl status mud_server

@@ -114,6 +114,7 @@ int get_next_room(int current_room, char direction) {
         default:
             return 0;  // Invalid room
     }
+
 }
 
 /**
@@ -231,6 +232,7 @@ void initialize_rooms_building2(Room rooms[]) {
     rooms[9].connected_building_id = 0;
     
     syslog(LOG_INFO, "Building 2 (Tyler's rooms) initialized");
+
 }
 
 /**
