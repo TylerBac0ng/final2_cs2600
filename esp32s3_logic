@@ -1,0 +1,53 @@
+#include <LiquidCrystal_I2C.h>
+#include <Wire.h>
+
+#define SDA 10                   
+#define SCL 9                    
+
+#define PIN_LED    2
+#define PIN_BUTTON1 13
+#define PIN_BUTTON2 14
+
+LiquidCrystal_I2C lcd(0x27,16,2); 
+void setup() {
+  Wire.begin(SDA, SCL);          
+  if (!i2CAddrTest(0x27)) {
+    lcd = LiquidCrystal_I2C(0x3F, 16, 2);
+  }
+  lcd.init();                     
+  lcd.backlight();                
+  lcd.setCursor(0,0);     
+  lcd.print("hello, world!");      // print to test
+  
+  pinMode(PIN_LED, OUTPUT);
+  pinMode(PIN_BUTTON1, INPUT);
+  pinMode(PIN_BUTTON2, INPUT);
+}
+
+void loop() {
+ 
+
+  if (digitalRead(PIN_BUTTON1) == LOW) {
+    digitalWrite(PIN_LED,HIGH);
+  }else{
+    digitalWrite(PIN_LED,LOW);
+  }
+  if (digitalRead(PIN_BUTTON2) == LOW) {
+    digitalWrite(PIN_LED,HIGH);
+  }else{
+    digitalWrite(PIN_LED,LOW);
+  }
+
+  //lcd.setCursor(0,1);             
+  //lcd.print("Counter:");          
+  //lcd.print(millis() / 1000);
+  //delay(1000);
+}
+
+bool i2CAddrTest(uint8_t addr) {
+  Wire.beginTransmission(addr);
+  if (Wire.endTransmission() == 0) {
+    return true;
+  }
+  return false;
+}
