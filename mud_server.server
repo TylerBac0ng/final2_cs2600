@@ -1,0 +1,16 @@
+[Unit]
+Description=MUD (Multi-User Dungeon) Game Server
+After=network.target mosquitto.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/mud_server
+Restart=on-failure
+User=root
+Group=root
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=mud_server
+
+[Install]
+WantedBy=multi-user.target
