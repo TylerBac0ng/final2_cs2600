@@ -31,4 +31,8 @@ int get_next_room(int current_room, char direction);
 const char* get_room_description(Room rooms[], int current_room, char direction);
 void randomize_building_order(Room rooms[], int building_order[]);
 
+// Building connection functions
+bool is_connector_room(Room rooms[], int room_id);
+int get_connected_building(Room rooms[], int room_id);
+
 #endif /* ROOMS_H */
