@@ -271,7 +271,7 @@ void initialize_rooms(Room rooms[])
 }
 
 // get description of room based on current room and navigation
-const char *get_room_description(Room rooms[], int current_room, char direction)
+const char *get_room_description_building3(Room rooms[], int current_room, char direction)
 {
     // find the room index
     int room_idx = current_room - 1;
