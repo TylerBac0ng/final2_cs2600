@@ -49,12 +49,15 @@ void setup() {
   Serial.begin(115200);
   
   // Initialize I2C and LCD
+
   Wire.begin(SDA, SCL);          
   if (!i2CAddrTest(0x27)) {
     lcd = LiquidCrystal_I2C(0x3F, 16, 2);
   }
   lcd.init();                     
   lcd.backlight();                
+
+ 
   lcd.clear();
   lcd.setCursor(0, 0);     
   lcd.print("MUD Controller"); 
