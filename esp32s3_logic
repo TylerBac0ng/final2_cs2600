@@ -1,47 +1,166 @@
+/**
+ * ESP32 MUD Game Controller
+ * CS 2600 Final Project
+ * 
+ * This client handles button inputs for direction controls (N,S,E,W),
+ * sends these commands via UDP to the game server, and receives
+ * room descriptions via MQTT to display on the LCD.
+ */
+
 #include <LiquidCrystal_I2C.h>
 #include <Wire.h>
+#include <WiFi.h>
+#include <WiFiUdp.h>
+#include <PubSubClient.h>
 
+// Pin definitions
 #define SDA 10                   
 #define SCL 9                    
+#define PIN_LED 2
+#define PIN_BUTTON_NORTH 13
+#define PIN_BUTTON_SOUTH 14
+#define PIN_BUTTON_EAST 6
+#define PIN_BUTTON_WEST 7
 
-#define PIN_LED    2
-#define PIN_BUTTON1 13
-#define PIN_BUTTON2 14
+// WiFi and server settings 
+const char* ssid = "ssid";
+const char* password = "password";
+const char* server_ip = "IP";  // GCP instance IP
+const int udp_port = 8888;                     // UDP port for commands
+const char* mqtt_server = "IP"; // Same as server_ip
+const int mqtt_port = 1883;
+const char* mqtt_topic_prefix = "mud/player/";
 
-LiquidCrystal_I2C lcd(0x27,16,2); 
+// Global variables
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+WiFiUDP udp;
+WiFiClient espClient;
+PubSubClient mqtt_client(espClient);
+unsigned int localPort = 2390;  // Local port to listen on
+char player_id[10] = "";        // Will be assigned by the server
+String mqtt_player_topic = "";
+bool button_pressed = false;
+char packetBuffer[255];         // Buffer to hold incoming packet
+String current_description = "";
+int scroll_position = 0;        // For scrolling long messages
+unsigned long last_scroll_time = 0;
+
 void setup() {
+  Serial.begin(115200);
+  
+  // Initialize I2C and LCD
   Wire.begin(SDA, SCL);          
   if (!i2CAddrTest(0x27)) {
     lcd = LiquidCrystal_I2C(0x3F, 16, 2);
   }
   lcd.init();                     
   lcd.backlight();                
-  lcd.setCursor(0,0);     
-  lcd.print("hello, world!");      // print to test
+  lcd.clear();
+  lcd.setCursor(0, 0);     
+  lcd.print("MUD Controller"); 
+  lcd.setCursor(0, 1);
+  lcd.print("Connecting..."); 
   
+  // Set up pins
   pinMode(PIN_LED, OUTPUT);
-  pinMode(PIN_BUTTON1, INPUT);
-  pinMode(PIN_BUTTON2, INPUT);
+  pinMode(PIN_BUTTON_NORTH, INPUT_PULLUP);
+  pinMode(PIN_BUTTON_SOUTH, INPUT_PULLUP);
+  pinMode(PIN_BUTTON_EAST, INPUT_PULLUP);
+  pinMode(PIN_BUTTON_WEST, INPUT_PULLUP);
+  
+  // Connect to WiFi
+  setup_wifi();
+  
+  // Initialize UDP for sending commands to server
+  udp.begin(localPort);
+  Serial.print("UDP listening on port ");
+  Serial.println(localPort);
+  
+  // Initialize MQTT for receiving room descriptions
+  mqtt_client.setServer(mqtt_server, mqtt_port);
+  mqtt_client.setCallback(mqtt_callback);
+  
+  // Send "new" packet to get assigned a player ID
+  send_udp_command("new");
+  
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Waiting for ID");
+  lcd.setCursor(0, 1);
+  lcd.print("from server...");
+  
+  // Wait for player ID assignment from server
+  wait_for_player_id();
+  
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Player ID: ");
+  lcd.print(player_id);
+  lcd.setCursor(0, 1);
+  lcd.print("Ready to play!");
+  delay(2000);
 }
 
 void loop() {
- 
-
-  if (digitalRead(PIN_BUTTON1) == LOW) {
-    digitalWrite(PIN_LED,HIGH);
-  }else{
-    digitalWrite(PIN_LED,LOW);
+  // Ensure MQTT is connected for receiving room descriptions
+  if (!mqtt_client.connected()) {
+    reconnect_mqtt();
   }
-  if (digitalRead(PIN_BUTTON2) == LOW) {
-    digitalWrite(PIN_LED,HIGH);
-  }else{
-    digitalWrite(PIN_LED,LOW);
+  mqtt_client.loop();
+  
+  // Check for incoming UDP packets (for player ID assignment)
+  int packetSize = udp.parsePacket();
+  if (packetSize) {
+    process_udp_packet(packetSize);
   }
-
-  //lcd.setCursor(0,1);             
-  //lcd.print("Counter:");          
-  //lcd.print(millis() / 1000);
-  //delay(1000);
+  
+  // Check for button presses to send movement commands
+  if (!button_pressed) {
+    if (digitalRead(PIN_BUTTON_NORTH) == LOW) {
+      digitalWrite(PIN_LED, HIGH);
+      send_udp_command("N");
+      button_pressed = true;
+    } 
+    else if (digitalRead(PIN_BUTTON_SOUTH) == LOW) {
+      digitalWrite(PIN_LED, HIGH);
+      send_udp_command("S");
+      button_pressed = true;
+    } 
+    else if (digitalRead(PIN_BUTTON_EAST) == LOW) {
+      digitalWrite(PIN_LED, HIGH);
+      send_udp_command("E");
+      button_pressed = true;
+    } 
+    else if (digitalRead(PIN_BUTTON_WEST) == LOW) {
+      digitalWrite(PIN_LED, HIGH);
+      send_udp_command("W");
+      button_pressed = true;
+    } 
+    else {
+      digitalWrite(PIN_LED, LOW);
+    }
+  } 
+  else {
+    // Wait until all buttons are released
+    if (digitalRead(PIN_BUTTON_NORTH) == HIGH && 
+        digitalRead(PIN_BUTTON_SOUTH) == HIGH && 
+        digitalRead(PIN_BUTTON_EAST) == HIGH && 
+        digitalRead(PIN_BUTTON_WEST) == HIGH) {
+      button_pressed = false;
+      delay(50); // Debounce
+    }
+  }
+  
+  // Scroll long descriptions if necessary
+  if (current_description.length() > 32) {
+    unsigned long now = millis();
+    if (now - last_scroll_time > 1000) {  // Scroll every second
+      scroll_description();
+      last_scroll_time = now;
+    }
+  }
+  
+  delay(100);
 }
 
 bool i2CAddrTest(uint8_t addr) {
@@ -50,4 +169,183 @@ bool i2CAddrTest(uint8_t addr) {
     return true;
   }
   return false;
+}
+
+void setup_wifi() {
+  delay(10);
+  Serial.println();
+  Serial.print("Connecting to ");
+  Serial.println(ssid);
+
+  WiFi.begin(ssid, password);
+
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+    lcd.setCursor(0, 1);
+    lcd.print("WiFi connecting...");
+  }
+
+  Serial.println("");
+  Serial.println("WiFi connected");
+  Serial.println("IP address: ");
+  Serial.println(WiFi.localIP());
+  
+  lcd.setCursor(0, 1);
+  lcd.print("WiFi connected!  ");
+  delay(1000);
+}
+
+void send_udp_command(const char* command) {
+  // Send movement command to server using UDP
+  udp.beginPacket(server_ip, udp_port);
+  udp.write((const uint8_t*)command, strlen(command));
+  udp.endPacket();
+  
+  Serial.print("Sent UDP command: ");
+  Serial.println(command);
+  
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  if (strcmp(command, "new") == 0) {
+    lcd.print("Requesting ID...");
+  } else if (strcmp(command, "reset") == 0) {
+    lcd.print("Resetting game...");
+  } else {
+    lcd.print("Moving ");
+    if (strcmp(command, "N") == 0) lcd.print("North");
+    else if (strcmp(command, "S") == 0) lcd.print("South");
+    else if (strcmp(command, "E") == 0) lcd.print("East");
+    else if (strcmp(command, "W") == 0) lcd.print("West");
+  }
+}
+
+void process_udp_packet(int packetSize) {
+  // Read the packet into the buffer
+  int len = udp.read(packetBuffer, 255);
+  if (len > 0) {
+    packetBuffer[len] = 0;  // Null-terminate the string
+  }
+  
+  Serial.print("Received UDP packet: ");
+  Serial.println(packetBuffer);
+  
+  // If this is a player ID assignment
+  if (strncmp(packetBuffer, "player:", 7) == 0) {
+    strncpy(player_id, packetBuffer + 7, 9);
+    player_id[9] = 0;  // Ensure null termination
+    
+    // Subscribe to this player's MQTT topic for room descriptions
+    mqtt_player_topic = String(mqtt_topic_prefix) + String(player_id);
+    
+    Serial.print("Assigned player ID: ");
+    Serial.println(player_id);
+    Serial.print("MQTT topic: ");
+    Serial.println(mqtt_player_topic);
+  }
+}
+
+void wait_for_player_id() {
+  unsigned long start_time = millis();
+  while (strlen(player_id) == 0) {
+    int packetSize = udp.parsePacket();
+    if (packetSize) {
+      process_udp_packet(packetSize);
+    }
+    
+    // Timeout after 10 seconds
+    if (millis() - start_time > 10000) {
+      Serial.println("Timeout waiting for player ID");
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      lcd.print("Error: No ID");
+      lcd.setCursor(0, 1);
+      lcd.print("Retrying...");
+      
+      // Retry the request
+      send_udp_command("new");
+      start_time = millis();
+    }
+    
+    delay(100);
+  }
+}
+
+void reconnect_mqtt() {
+  // Loop until we're reconnected
+  int retry_count = 0;
+  while (!mqtt_client.connected() && retry_count < 5) {
+    Serial.print("Attempting MQTT connection...");
+    
+    // Create a random client ID
+    String clientId = "ESPClient-";
+    clientId += String(random(0xffff), HEX);
+    
+    // Attempt to connect
+    if (mqtt_client.connect(clientId.c_str())) {
+      Serial.println("connected");
+      
+      // Subscribe to player's MQTT topic for room descriptions
+      if (mqtt_player_topic.length() > 0) {
+        mqtt_client.subscribe(mqtt_player_topic.c_str());
+        Serial.print("Subscribed to MQTT topic: ");
+        Serial.println(mqtt_player_topic);
+      }
+    } else {
+      Serial.print("failed, rc=");
+      Serial.print(mqtt_client.state());
+      Serial.println(" trying again in 5 seconds");
+      retry_count++;
+      delay(5000);
+    }
+  }
+}
+
+void mqtt_callback(char* topic, byte* payload, unsigned int length) {
+  // Process incoming MQTT messages (room descriptions)
+  Serial.print("Message arrived [");
+  Serial.print(topic);
+  Serial.print("] ");
+  
+  // Create a null-terminated string from the payload
+  char message[length + 1];
+  for (unsigned int i = 0; i < length; i++) {
+    message[i] = (char)payload[i];
+  }
+  message[length] = '\0';
+  
+  Serial.println(message);
+  
+  // Update the current description
+  current_description = String(message);
+  scroll_position = 0;
+  
+  // Display the first part of the description
+  display_description();
+}
+
+void display_description() {
+  lcd.clear();
+  
+  // Display first line (16 chars)
+  String line1 = current_description.substring(scroll_position, min(scroll_position + 16, (int)current_description.length()));
+  lcd.setCursor(0, 0);
+  lcd.print(line1);
+  
+  // Display second line (16 chars)
+  if (current_description.length() > scroll_position + 16) {
+    String line2 = current_description.substring(scroll_position + 16, min(scroll_position + 32, (int)current_description.length()));
+    lcd.setCursor(0, 1);
+    lcd.print(line2);
+  }
+}
+
+void scroll_description() {
+  // Increment scroll position, with wrap-around
+  scroll_position += 16;
+  if (scroll_position > current_description.length() - 16) {
+    scroll_position = 0;
+  }
+  
+  display_description();
 }
