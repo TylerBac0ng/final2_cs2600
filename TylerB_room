@@ -101,10 +101,10 @@ int get_next_room(int current_room, char direction) {
 			
 		case 10:  // Room 10
 			switch(direction) {
-				case 'n': return 0;        // North - no exit
+				case 'n': return 1;        // reset win
 				case 's': return 0;        // South - no exit
 				case 'e': return 1;        // East - Reset to Room 1 (WIN)
-				case 'w': return 0;        // West - no exit
+				case 'w': return 1;        // reset win
 				default: return 0;
 			}
 			
@@ -212,10 +212,10 @@ void initialize_rooms(Room rooms[]) {
 
 	// Room 10
 	rooms[9].id = 10;
-	strcpy(rooms[9].north_desc, "you go north, theres a twisty backroad");
+	strcpy(rooms[9].north_desc, "YOU WIN, you find a steak in the middle console and eat it (GAME OVER) ask to reset?"); // Game over - return to Room 1
 	strcpy(rooms[9].south_desc, "you go south, park your car and head back home"); // Returns to Room 9 - matching Room 9's north description
-	strcpy(rooms[9].east_desc, "you turn east, you find a steak in the middle console and eat it (GAME OVER) ask to reset?"); // Game over - return to Room 1
-	strcpy(rooms[9].west_desc, "you turn west, theres a racetrack with other cars");
+	strcpy(rooms[9].east_desc, "YOU WIN, you find a steak in the middle console and eat it (GAME OVER) ask to reset?"); // Game over - return to Room 1
+	strcpy(rooms[9].west_desc, "YOU WIN, you find a steak in the middle console and eat it (GAME OVER) ask to reset?"); // Game over - return to Room 1
 	rooms[9].is_start_room = false;
 	rooms[9].is_item_room = true;  // This is the item room where the game ends
 	rooms[9].is_connector_room = false;
